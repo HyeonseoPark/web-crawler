@@ -358,14 +358,12 @@ chrome.exe --remote-debugging-port=9222 \
 ## 출력/저장 디렉터리 구조
 
 ```
-output/                                  # gitignore — 수집 결과물
-└── <도메인>/                            # 사이트별 폴더 (예: books.toscrape.com)
-    ├── <크롤링주제_YYYYMMDD_HHMMSS>/    # 실행 건별 폴더
-    │   ├── crawl_result.xlsx            # 최종 엑셀
-    │   ├── raw_data.json                # 원시 수집 데이터
-    │   ├── progress.json                # 진행상황
-    │   └── crawl_script.py              # 생성된 수집 스크립트
-    └── cookies.json                     # 사이트별 쿠키 (gitignore + cookies* 차단)
+G:\내 드라이브\07. AI\클로드\11. 웹크롤러\  # Windows 기본 결과 루트
+└── <YYYYMMDD_사이트명>/                  # 예: 20260908_나라장터
+    ├── crawl_result.xlsx                 # 최종 엑셀
+    ├── raw_data.json                     # 원시 수집 데이터
+    ├── progress.json                     # 진행상황
+    └── crawl_script.py                   # 생성된 수집 스크립트
 
 fingerprints/                            # gitignore + whitelist 정책
 ├── elements_storage.db                  # gitignore — Scrapling 셀렉터 자가 치유 DB (전역 공유)
@@ -375,9 +373,9 @@ fingerprints/                            # gitignore + whitelist 정책
 ```
 
 ### 규칙
-- **사이트 폴더 (output/)**: 도메인 기준으로 하나만 생성 (예: `books.toscrape.com`, `www.kurly.com`)
-- **작업 폴더**: `<주제요약>_<YYYYMMDD_HHMMSS>` 형식. 주제는 한글/영문 모두 가능, 공백은 `_`로 대체
-- **쿠키**: 사이트 폴더 루트에 저장하여 같은 사이트의 모든 작업이 공유
+- **결과 루트**: Windows는 위 Google Drive 경로, macOS/Linux는 저장소의 `output/`. `WEB_CRAWLER_OUTPUT_ROOT`로 변경 가능
+- **작업 폴더**: `<YYYYMMDD_사이트명>` 형식. 예: `20260908_나라장터`
+- **쿠키**: 결과 데이터와 분리하여 저장소의 gitignore 대상 `output/<도메인>/cookies.json`에 저장
 - **셀렉터 핑거프린트**: `fingerprints/elements_storage.db` (전역 공유, ignore)
 - **도메인 프로필**: `fingerprints/<sanitized_domain>/profile.json` (commit 대상). `sanitize_filename`은 `[^\w\-]`를 `_`로 치환 — 예: `books.toscrape.com` → `books_toscrape_com`, `made-in-china.com` → `made-in-china_com`
 

@@ -390,7 +390,8 @@ Step 3에서 결정한 전략에 맞는 코드 패턴을 `references/fetcher-pat
 ### 출력 디렉토리 구조
 
 ```
-output/<도메인>/<주제_YYYYMMDD_HHMMSS>/
+Windows 기본값: G:\내 드라이브\07. AI\클로드\11. 웹크롤러\<YYYYMMDD_사이트명>/
+macOS/Linux 기본값: output/<YYYYMMDD_사이트명>/
 ├── crawl_script.py    # 생성된 수집 스크립트
 ├── raw_data.json      # 원시 데이터
 ├── crawl_result.xlsx   # 엑셀 결과

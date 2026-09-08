@@ -88,6 +88,23 @@ robots.txt 에는 법적 구속력이 없습니다. 그래도 표지판입니다
 
 결과는 항상 깔끔한 **엑셀(.xlsx)** 파일로 나옵니다.
 
+Windows에서 결과는 기본적으로 아래 Google Drive 폴더에 저장됩니다.
+
+```text
+G:\내 드라이브\07. AI\클로드\11. 웹크롤러\YYYYMMDD_사이트명\
+```
+
+예를 들어 2026년 9월 8일 나라장터 수집 결과는
+`G:\내 드라이브\07. AI\클로드\11. 웹크롤러\20260908_나라장터`에 저장됩니다.
+다른 위치를 쓰려면 실행 전에 `WEB_CRAWLER_OUTPUT_ROOT` 환경변수만 설정하면 됩니다.
+
+2026년 나라장터 공고명에 `AI`가 포함된 결과를 수집하려면 저장소 루트의
+PowerShell에서 다음 명령을 실행합니다.
+
+```powershell
+.\.venv\Scripts\python.exe jobs\g2b_ai_2026\crawl_script.py --show-browser
+```
+
 > 어떤 사이트에서 수집할지는 사용자가 정합니다. 시작 전에 위 [여섯 조건](#2-웹-크롤링-적법성-판단의-기준)을 확인하세요.
 
 ## 사용법 (설치 후)
@@ -269,20 +286,18 @@ python -m venv .venv && . .venv/bin/activate && python scripts/bootstrap.py
 |------|------|------|
 | `scripts/` · `.claude/` · `.codex/` | ✓ tracked | 공통 모듈, 에이전트 지시서·스킬 |
 | `fingerprints/<도메인>/profile.json` | 배포 판정 통과분만 tracked | 도메인 수집 레시피 (자격증명 제외). 판정은 `scripts/profile_policy.py` |
-| `output/` | 로컬 전용 | 수집 결과물 — 제3자 콘텐츠·PII 가능 |
+| Windows Google Drive 결과 경로 / `output/` | 로컬 전용 | 수집 결과물 — 제3자 콘텐츠·PII 가능 |
 | `**/cookies*.json` · `**/*auth*.json` | 로컬 전용 | 로그인 쿠키·토큰 |
 
 ### 출력 디렉터리
 
 ```
-output/                              # gitignore — 수집 결과물
-└── <도메인>/                        # 예: example.com
-    ├── <주제_YYYYMMDD_HHMMSS>/      # 실행 건별 폴더
-    │   ├── crawl_result.xlsx        # 최종 엑셀
-    │   ├── raw_data.json            # 원시 데이터
-    │   ├── progress.json            # 진행 상황 (중단 시 이어서 수집)
-    │   └── crawl_script.py          # 생성된 수집 스크립트
-    └── cookies.json                 # ignored — 로그인 쿠키 (같은 사이트의 모든 작업이 공유)
+G:\내 드라이브\07. AI\클로드\11. 웹크롤러\  # Windows 기본값
+└── <YYYYMMDD_사이트명>/              # 예: 20260908_나라장터
+    ├── crawl_result.xlsx             # 최종 엑셀
+    ├── raw_data.json                 # 원시 데이터
+    ├── progress.json                 # 진행 상황 (중단 시 이어서 수집)
+    └── crawl_script.py               # 실제 실행 스크립트 사본
 
 fingerprints/                        # gitignore + 배포 화이트리스트 (default-deny)
 ├── elements_storage.db              # ignored — Scrapling 셀렉터 자가치유 DB (전역 공유)

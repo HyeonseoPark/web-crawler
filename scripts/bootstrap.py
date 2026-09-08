@@ -22,6 +22,8 @@ import sys
 import time
 from pathlib import Path
 
+from output_path import get_output_root
+
 for _s in (sys.stdout, sys.stderr):
     try:
         _s.reconfigure(errors="replace")
@@ -190,10 +192,11 @@ def do_workdirs():
 
     export_excel/progress 가 기록 시점에 makedirs 하므로 기능상 필수는 아니다.
     갓 clone한 트리에서 "결과가 어디로 가는지" 눈에 보이게 하려는 목적.
-    output/ 은 통째로 gitignore라 이 폴더는 커밋되지 않는다.
+    Windows 기본 경로는 사용자 Google Drive이고, 그 외 환경은 저장소 output/이다.
     """
-    (REPO / "output").mkdir(exist_ok=True)
-    log(f"  [OK] 작업 디렉터리: {REPO / 'output'}")
+    output_root = get_output_root()
+    output_root.mkdir(parents=True, exist_ok=True)
+    log(f"  [OK] 작업 디렉터리: {output_root}")
 
 
 def do_preflight(core_only):
