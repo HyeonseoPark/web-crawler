@@ -38,6 +38,19 @@ def test_set_year_range_preserves_integer_dates():
     assert payload["condition"]["inqryEndDt"] == 20261231
 
 
+def test_set_year_range_accepts_direction_prefix_from_live_g2b_request():
+    payload = {
+        "dlBidPbancLstM": {
+            "fromBidDt": "20260809",
+            "toBidDt": "20260908",
+        }
+    }
+    changed = set_year_range(payload, 2026)
+    assert changed == ["dlBidPbancLstM.fromBidDt", "dlBidPbancLstM.toBidDt"]
+    assert payload["dlBidPbancLstM"]["fromBidDt"] == "20260101"
+    assert payload["dlBidPbancLstM"]["toBidDt"] == "20261231"
+
+
 def test_set_year_range_stops_when_fields_are_unknown():
     payload = {"condition": {"createdDate": "20260908"}}
     try:

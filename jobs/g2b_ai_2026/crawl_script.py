@@ -60,12 +60,14 @@ def set_year_range(payload: dict, year: int) -> list[str]:
     date_pattern = re.compile(r"^20\d{2}(?:[-./]?\d{2}){2}$")
     date_key_pattern = re.compile(r"(?:date|dt|ymd)", re.IGNORECASE)
     start_pattern = re.compile(
-        r"(?:bgn|begin|start|from|fr|strt|stt|1)(?:date|dt|ymd)?$"
+        r"^(?:bgn|begin|start|from|fr|strt|stt).*?(?:date|dt|ymd)$"
+        r"|(?:bgn|begin|start|from|fr|strt|stt|1)(?:date|dt|ymd)?$"
         r"|(?:date|dt|ymd)(?:bgn|begin|start|from|fr|strt|stt|1)$",
         re.IGNORECASE,
     )
     end_pattern = re.compile(
-        r"(?:end|finish|to|2)(?:date|dt|ymd)?$"
+        r"^(?:end|finish|to).*?(?:date|dt|ymd)$"
+        r"|(?:end|finish|to|2)(?:date|dt|ymd)?$"
         r"|(?:date|dt|ymd)(?:end|finish|to|2)$",
         re.IGNORECASE,
     )
