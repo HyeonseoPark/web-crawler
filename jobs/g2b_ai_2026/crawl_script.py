@@ -33,9 +33,12 @@ PAGE_SIZE = 100
 REQUEST_DELAY_SECONDS = 1.0
 
 
-def _date_value(year: int, is_start: bool, sample: str) -> str:
+def _date_value(year: int, is_start: bool, sample: object) -> object:
     month_day = "0101" if is_start else "1231"
     digits = f"{year}{month_day}"
+    if isinstance(sample, int):
+        return int(digits)
+    sample = str(sample)
     if "." in sample:
         return f"{digits[:4]}.{digits[4:6]}.{digits[6:]}"
     if "/" in sample:
@@ -53,20 +56,28 @@ def set_year_range(payload: dict, year: int) -> list[str]:
     수집하지 않도록 즉시 중단한다.
     """
     changed: list[str] = []
+    candidates: list[str] = []
     date_pattern = re.compile(r"^20\d{2}(?:[-./]?\d{2}){2}$")
     date_key_pattern = re.compile(r"(?:date|dt|ymd)", re.IGNORECASE)
     start_pattern = re.compile(
-        r"(?:bgn|begin|start|from|fr|strt|stt|1)(?:date|dt|ymd)?$", re.IGNORECASE
+        r"(?:bgn|begin|start|from|fr|strt|stt|1)(?:date|dt|ymd)?$"
+        r"|(?:date|dt|ymd)(?:bgn|begin|start|from|fr|strt|stt|1)$",
+        re.IGNORECASE,
     )
     end_pattern = re.compile(
-        r"(?:end|finish|to|2)(?:date|dt|ymd)?$", re.IGNORECASE
+        r"(?:end|finish|to|2)(?:date|dt|ymd)?$"
+        r"|(?:date|dt|ymd)(?:end|finish|to|2)$",
+        re.IGNORECASE,
     )
 
     def visit(node: object, prefix: str = "") -> None:
         if isinstance(node, dict):
             for key, value in node.items():
                 path = f"{prefix}.{key}" if prefix else str(key)
-                if isinstance(value, str) and date_pattern.match(value) and date_key_pattern.search(str(key)):
+                value_text = str(value)
+                is_date_value = isinstance(value, (str, int)) and bool(date_pattern.match(value_text))
+                if is_date_value and date_key_pattern.search(str(key)):
+                    candidates.append(f"{path}={value_text}")
                     if start_pattern.search(str(key)):
                         node[key] = _date_value(year, True, value)
                         changed.append(path)
@@ -81,9 +92,11 @@ def set_year_range(payload: dict, year: int) -> list[str]:
 
     visit(payload)
     if len(changed) < 2:
+        candidate_text = ", ".join(candidates[:12]) or "날짜 후보 없음"
         raise RuntimeError(
             "나라장터 검색 요청에서 공고일 시작·종료 필드를 확인하지 못했습니다. "
-            "2026년 전체가 아닌 일부만 저장될 수 있어 중단합니다."
+            "2026년 전체가 아닌 일부만 저장될 수 있어 중단합니다. "
+            f"감지한 날짜 후보: {candidate_text}"
         )
     return changed
 
