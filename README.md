@@ -105,6 +105,23 @@ PowerShell에서 다음 명령을 실행합니다.
 .\.venv\Scripts\python.exe jobs\g2b_ai_2026\crawl_script.py --show-browser
 ```
 
+서울시 강남구 개포동의 30평대 매매 매물을 수집하려면 다음 명령을 실행합니다.
+이 작업에서 30평대는 네이버페이 부동산 화면 필터와 같은 공급면적 `99~132㎡`를
+뜻합니다. 결과에는 중개사 전화번호를 포함하지 않습니다.
+
+```powershell
+.\.venv\Scripts\python.exe jobs\naver_land_gaepo_30p\crawl_script.py
+```
+
+시험 실행은 단지 수와 단지별 페이지 수를 제한할 수 있습니다.
+
+```powershell
+.\.venv\Scripts\python.exe jobs\naver_land_gaepo_30p\crawl_script.py --max-complexes 3 --max-pages-per-complex 1
+```
+
+> 네이버 이용약관은 사전 허락 없는 자동화 수집을 제한합니다. 실행 전 이용 목적과
+> 필요한 허락 여부를 확인하고, 상대 서버에 부담을 주지 않는 범위에서 사용하세요.
+
 > 어떤 사이트에서 수집할지는 사용자가 정합니다. 시작 전에 위 [여섯 조건](#2-웹-크롤링-적법성-판단의-기준)을 확인하세요.
 
 ## 사용법 (설치 후)
