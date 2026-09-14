@@ -146,7 +146,8 @@ def collect(page, limit: int, selectors: dict, max_rounds: int = 20) -> tuple[li
 
 
 def crawl(identifier: str, limit: int, selectors: dict, *, permission: bool = False,
-          headed: bool = False) -> tuple[list[dict], str]:
+          headed: bool = False, search_query: str | None = None,
+          collector=None) -> tuple[list[dict], str]:
     if not permission:
         raise PermissionError(
             "네이버 약관상 자동 수집에는 사전 허락이 필요합니다. 허락받은 경우에만 "
@@ -154,6 +155,9 @@ def crawl(identifier: str, limit: int, selectors: dict, *, permission: bool = Fa
         )
     from playwright.sync_api import sync_playwright
     target = f"https://pcmap.place.naver.com/restaurant/{identifier}/review/ugc"
+    if search_query is not None:
+        from urllib.parse import urlencode
+        target = "https://search.naver.com/search.naver?" + urlencode({"where": "blog", "query": search_query})
     with sync_playwright() as pw:
         # No saved login, CDP, stealth, proxy, private API replay, or retry ladder.
         browser = pw.chromium.launch(headless=not headed)
@@ -210,7 +214,7 @@ def crawl(identifier: str, limit: int, selectors: dict, *, permission: bool = Fa
             page.wait_for_timeout(2000)
             if failures:
                 raise PermissionError(failures[0])
-            rows, reason = collect(page, limit, selectors)
+            rows, reason = (collector or collect)(page, limit, selectors)
             if failures:
                 raise PermissionError(failures[0])
             return rows, reason
