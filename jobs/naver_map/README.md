@@ -97,3 +97,28 @@ PC/모바일/`PostView.naver` URL의 동일 게시물은 하나로 합칩니다.
 제목과 짧은 요약뿐입니다. 따라서 이 수치는 "본문에서 실제로 칭찬받은 빵"이 아니라
 **"제목·요약에 노출된 빵"**이며, 언급 횟수는 맛 평가가 아니라 노출 빈도입니다.
 사전에 없는 빵은 세지 않으므로, 결과가 빈약하면 `BREAD_LEXICON`에 이름을 추가하세요.
+
+## 본문 기준 '맛있다' 판정 (`fetch_posts.py` → `judge_tasty.py`)
+
+목록 미리보기가 아니라 블로그 글 본문으로 "맛있다고 한 빵"을 셉니다. **판정은 AI 없이 규칙으로 합니다.**
+`blog.naver.com/robots.txt` 가 "AI 학습·RAG 목적의 봇 접근 금지"를 명시하고 AI 봇을 이름으로 막고 있기 때문입니다.
+받은 본문(`posts.json`)은 로컬에만 두고 AI 에게 넘기지 않습니다. 두 스크립트 모두 본문을 화면에 출력하지 않습니다.
+
+```powershell
+# 1) 본문 받기: 모바일 글 페이지, 사다리 2단(plain_session), 호스트별 robots 확인, 기본 2.5초 간격
+.\.venv\Scripts\python.exe jobs\naver_map\fetch_posts.py output\<결과폴더>\blog_reviews.csv --output-dir $env:TEMP\web-crawler\posts
+
+# 2) 규칙 판정 → 엑셀 (--preview-json 은 이전 판정 {빵: 표수} 비교용, 선택)
+.\.venv\Scripts\python.exe jobs\naver_map\judge_tasty.py $env:TEMP\web-crawler\posts\posts.json --output output\<결과폴더>\bread_tasty_votes_본문규칙.xlsx
+
+.\.venv\Scripts\python.exe -m pytest scripts\test_judge_tasty.py -q
+```
+
+규칙 요약 (전체 목록은 엑셀 `판정 규칙` 시트):
+- 한 문장에 빵 이름 + 긍정 표현이 있고 부정·전해들은 표현이 없으면 1표. 글 하나에서 같은 빵은 1표.
+- "카페 추천", "메론빵이 맛있는 베이커리" 같은 **가게 추천·소개**는 빼고, "소보로빵 같은 느낌" 같은 **비교**의 빵 이름은 세지 않습니다.
+- 빵 이름만 있는 짧은 줄 바로 다음의 짧은 **맛** 표현("반숙카레빵" → "진짜 맛있었어요")만 앞 줄에 연결합니다. "좋았다"·"추천"은 연결하지 않습니다.
+
+한계: 반어법, 멀리 떨어진 평가, "산 빵 다 맛있었다" 같은 묶음 칭찬, 사전에 없는 빵 이름은 놓치거나 잘못 셉니다.
+2026-09-15 아소토베이커리 50건에서는 AI 미리보기 판정보다 기본 메론빵이 많고 메론크림빵·후르츠산도가 적게 나왔습니다.
+엑셀 `글별 판정` 의 근거 문장으로 사람이 확인하는 것을 전제로 합니다.
