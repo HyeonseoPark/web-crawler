@@ -6,15 +6,22 @@
 
 ## 현재 검증 범위와 접근 조건
 
-**실사이트의 DOM·페이지네이션은 아직 검증하지 못했습니다.** 선택자는 의미 기반 후보이며,
-현재 네이버 화면에서 그대로 작동한다고 보장하지 않습니다. 합성 HTML로 Playwright 추출,
+**2026-09-15 실사이트에서 50건 수집을 한 번 확인했습니다** (아소토베이커리, `--ignore-robots --delay 2.5`).
+그때 드러난 문제를 고쳤습니다. 네이버 화면은 바뀔 수 있으니 이후에도 작동을 보장하지는 않습니다.
+
+- 그냥 "더보기"는 **사진 페이지로 가는 링크**입니다. 리뷰를 더 붙이는 컨트롤은 `href="#"` 인 "펼쳐서 더보기"입니다.
+- 광고 서버(`nam.veta.naver.com`)가 이 도구의 User-Agent 에 400 을 돌려줘 "4xx면 중단" 에 걸렸습니다. 광고 요청은 보내지 않습니다.
+- 요청 간격이 길면 클릭 후 고정 대기로는 새 카드가 아직 없어 `no_new_reviews` 로 일찍 끝났습니다. 링크 수가 늘 때까지 최대 20초 기다립니다.
+- 실사이트에서는 카드 `li` 의 제목 칸에 **미리보기 본문(약 1,000자)이 통째로** 들어오고, 작성자·요약 칸은 비어 있습니다. 합성 HTML로 Playwright 추출,
 더보기, URL 정규화/중복 제거, CSV 출력을 테스트합니다. 테스트 데이터는 실제 리뷰가 아닙니다.
 
 2026-09-14 확인한 [네이버 약관](https://policy.naver.com/rules/service.html)의
 ‘네이버 서비스 이용과 관련하여 몇 가지 주의사항이 있습니다’는 사전 허락 없는 자동 게시물 수집을
 제한합니다. 따라서 실제 수집은 네이버의 사전 허락을 받은 경우에만 `--naver-permission`을 지정합니다.
 이 옵션은 사용자 동의로 네이버의 허락을 대체하거나 robots 제한을 무시하는 옵션이 아닙니다.
-이번 개발에서는 허락이 확인되지 않아 실제 리뷰 수집 및 내부 네트워크 API 정찰을 실행하지 않았습니다.
+`pcmap.place.naver.com/robots.txt` 는 `User-agent: *` 에 `Disallow: /` 입니다. 그래서 기본값에서는 시작하자마자 중단합니다.
+금지 사실을 통지받고 진행을 고른 경우에만 `--ignore-robots` 를 붙입니다. 이 옵션도 crawl-delay·요청 상한·차단 화면 감지는 그대로 지킵니다.
+위장(UA 스푸핑·stealth)은 이 옵션과 무관하게 쓰지 않습니다.
 
 브라우저가 공개 장소 리뷰 화면(`/restaurant/<id>/review/ugc`)을 로드하고 더보기/스크롤로 진행합니다.
 문서·XHR·fetch 요청 전 각 origin의 robots.txt를 Playwright로 검사합니다. 금지/조회 실패/리다이렉트,
@@ -33,6 +40,9 @@ HTTP 오류, 로그인, CAPTCHA·접근 제한에서 중단합니다. 요청 간
 # 네이버의 사전 허락을 받은 환경에서만 사용: 기본 50개
 .\.venv\Scripts\python.exe jobs\naver_map\crawl_script.py --place 1141254769 --naver-permission
 
+# robots 금지를 통지받고 진행을 고른 경우 (2026-09-15 실수집 설정)
+.\.venv\Scripts\python.exe jobs\naver_map\crawl_script.py --place 1141254769 --naver-permission --ignore-robots --delay 2.5
+
 # 장소 URL, 시험용 5개, 출력 위치 직접 지정
 .\.venv\Scripts\python.exe jobs\naver_map\crawl_script.py --place "https://map.naver.com/p/entry/place/1141254769" --limit 5 --naver-permission --output-dir output\naver_map_5
 
@@ -40,7 +50,7 @@ HTTP 오류, 로그인, CAPTCHA·접근 제한에서 중단합니다. 요청 간
 ```
 
 macOS/Linux에서는 Python 경로를 `.venv/bin/python`으로 바꿉니다.
-`--headed`로 브라우저를 표시할 수 있습니다. `--place` 생략 시 예시 ID, `--limit` 생략 시 50이며
+`--headed`로 브라우저를 표시할 수 있습니다. `--delay` 는 요청 간 최소 간격(초, 기본 1, 1 미만 불가)입니다. `--place` 생략 시 예시 ID, `--limit` 생략 시 50이며
 범위는 1~50입니다. 다른 장소 유형 등의 이유로 주소가 리다이렉트되면 자동으로 따라가지 않고 중단합니다.
 
 `--output-dir` 생략 시 기존 `make_result_dir` 규칙과 `WEB_CRAWLER_OUTPUT_ROOT`를 따릅니다.
@@ -53,7 +63,7 @@ CSV는 Excel용 UTF-8 BOM, 표준 CSV 인용부호, 수식 시작 문자 보호�
 PC/모바일/`PostView.naver` URL의 동일 게시물은 하나로 합칩니다. 프로필 링크는 제외합니다.
 목표보다 적은 건수는 `no_new_reviews` 또는 `round_limit`로 보고하며 ‘전체 수집 완료’로 해석하지 않습니다.
 0건은 빈 목록 또는 DOM 변경일 수 있어 종료 코드 4로 중단합니다. 접근 차단은 3, 기타 오류는 1입니다.
-차단·오류 시 부분 결과를 성공 파일로 저장하지 않습니다. 실수집 성공 프로필은 이번 개발에서 생성하지 않았습니다.
+차단·오류 시 부분 결과를 성공 파일로 저장하지 않습니다. 실수집 레시피는 `fingerprints/pcmap_place_naver_com/profile.json` 에 `distribution: local` 로 남깁니다(robots 금지 도메인이라 배포하지 않음).
 
 ## DOM 변경 시
 

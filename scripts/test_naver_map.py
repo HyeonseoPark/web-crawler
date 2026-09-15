@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from jobs.naver_map.crawl_script import (
-    DEFAULT_SELECTORS, EXTRACT_JS, FIELDS, canonical_blog_url, collect, crawl,
+    AD_HOST_SUFFIXES, DEFAULT_SELECTORS, EXTRACT_JS, FIELDS, LOAD_MORE, canonical_blog_url, collect, crawl,
     main, merge_rows, parse_args, place_id, robots_delay, write_results,
 )
 
@@ -53,6 +53,15 @@ def test_dedup_limit_and_missing_fields():
 def test_robots_fails_closed(status, body):
     with pytest.raises(PermissionError):
         robots_delay(status, body, "https://pcmap.place.naver.com/restaurant/123")
+
+
+@pytest.mark.parametrize("status,body", [(403, ""), (200, "<html>challenge</html>"),
+    (200, "User-agent: *\nDisallow: /")])
+def test_ignore_robots_is_explicit_opt_in(status, body):
+    url = "https://pcmap.place.naver.com/restaurant/123"
+    assert robots_delay(status, body, url, ignore_robots=True) == 1
+    # crawl-delay 는 금지를 무시해도 지킨다
+    assert robots_delay(200, "User-agent: *\nDisallow: /\nCrawl-delay: 4", url, ignore_robots=True) == 4
 
 
 def test_robots_delay_and_missing_file():
@@ -122,6 +131,30 @@ def test_pagination_and_stop(browser_page):
     rows, reason = collect(browser_page, 2, DEFAULT_SELECTORS)
     assert len(rows) == 2
     assert reason == "limit_reached"
+
+
+def test_load_more_skips_photo_link(browser_page):
+    """실사이트 구조: 그냥 '더보기'는 사진 페이지 링크, 리뷰 추가는 href="#" 인 '펼쳐서 더보기'."""
+    browser_page.set_content('''<a href="/restaurant/1/photo" onclick="document.title='wrong';return false">더보기</a>
+    <ul><li><a href="https://blog.naver.com/a/1"><h3>One</h3></a></li></ul>
+    <a href="#" role="button" onclick="document.querySelector('ul').insertAdjacentHTML('beforeend',
+    '<li><a href=https://blog.naver.com/a/2><h3>Two</h3></a></li>');this.remove();return false">펼쳐서 더보기</a>''')
+    rows, reason = collect(browser_page, 2, DEFAULT_SELECTORS)
+    assert (len(rows), reason) == (2, "limit_reached")
+    assert browser_page.title() != "wrong"
+
+
+def test_load_more_pattern_and_ad_hosts():
+    assert LOAD_MORE.match("펼쳐서 더보기") and LOAD_MORE.match("더보기")
+    assert not LOAD_MORE.match("사진 더보기")
+    assert "nam.veta.naver.com".endswith(AD_HOST_SUFFIXES)
+    assert not "pcmap-api.place.naver.com".endswith(AD_HOST_SUFFIXES)
+
+
+def test_delay_must_be_at_least_one_second():
+    assert parse_args(["--delay", "2.5"]).delay == 2.5
+    with pytest.raises(SystemExit):
+        parse_args(["--delay", "0.2"])
 
 
 def test_empty_and_captcha_stop(browser_page):

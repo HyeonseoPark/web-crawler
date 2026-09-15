@@ -14,6 +14,8 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from output_path import make_result_dir  # noqa: E402
 from utils import RateLimiter, detect_pii, detect_softblock  # noqa: E402
 
+LOAD_MORE = re.compile(r"^\s*(?:펼쳐서\s*|블로그 리뷰\s*)?더보기\s*$")
+AD_HOST_SUFFIXES = ("veta.naver.com",)  # 광고 서버: 커스텀 UA 에 400 을 돌려 수집을 끊는다
 FIELDS = ("blog_url", "title", "author", "published_at", "summary")
 USER_AGENT = "WebCrawlerNaverMap/1.0 (+https://github.com/HyeonseoPark/web-crawler)"
 DEFAULT_SELECTORS = {
@@ -92,17 +94,23 @@ def merge_rows(rows: dict[str, dict], candidates: list[dict], limit: int) -> Non
             rows[url] = row
 
 
-def robots_delay(status: int, body: str, url: str) -> float:
-    """robots 조회 실패/거부는 허용으로 간주하지 않는다."""
+def robots_delay(status: int, body: str, url: str, *, ignore_robots: bool = False) -> float:
+    """robots 조회 실패/거부는 허용으로 간주하지 않는다.
+
+    ignore_robots=True 는 사용자가 금지 사실을 통지받고 진행을 고른 경우에만 쓴다.
+    그때도 crawl-delay 는 지킨다.
+    """
     from protego import Protego
     if status in {404, 410}:
         return 1.0
     if status != 200 or "<html" in body.lower():
+        if ignore_robots:
+            return 1.0
         raise PermissionError(f"robots.txt 확인 실패 (HTTP {status})")
     policy = Protego.parse(body)
     # A named bot must not sidestep a general prohibition.
-    if not all(policy.can_fetch(url, agent) for agent in (USER_AGENT, "*")):
-        raise PermissionError("robots.txt가 대상 경로 수집을 금지합니다.")
+    if not ignore_robots and not all(policy.can_fetch(url, agent) for agent in (USER_AGENT, "*")):
+        raise PermissionError("robots.txt가 대상 경로 수집을 금지합니다. (통지 후 진행하려면 --ignore-robots)")
     return max(1.0, float(policy.crawl_delay(USER_AGENT) or 0), float(policy.crawl_delay("*") or 0))
 
 
@@ -133,11 +141,20 @@ def collect(page, limit: int, selectors: dict, max_rounds: int = 20) -> tuple[li
         if stagnant >= 2:
             return list(rows.values()), "no_new_reviews"
         # Click only an unambiguous visible load-more control; never visit posts.
-        more = page.get_by_role("button", name=re.compile(r"^(?:블로그 리뷰\s*)?더보기$"))
-        links = page.get_by_role("link", name=re.compile(r"^(?:블로그 리뷰\s*)?더보기$"))
-        visible = [loc for group in (more, links) for loc in group.all() if loc.is_visible()]
+        # 실사이트(2026-09-15): 그냥 "더보기"는 사진 페이지로 가는 링크이고,
+        # 리뷰를 더 붙이는 컨트롤은 href="#" 인 "펼쳐서 더보기"다.
+        visible = [loc for loc in page.locator('a[href="#"], button').filter(
+            has_text=LOAD_MORE).all() if loc.is_visible()]
         if len(visible) == 1:
+            links_before = page.locator("a[href*='blog.naver.com']").count()
+            visible[0].scroll_into_view_if_needed()
             visible[0].click()
+            try:  # 요청 간격이 길면 고정 대기로는 새 카드가 아직 안 붙어 있다
+                page.wait_for_function(
+                    "n => document.querySelectorAll(\"a[href*='blog.naver.com']\").length > n",
+                    arg=links_before, timeout=20000)
+            except Exception:
+                pass
         else:
             page.locator("a[href*='blog.naver.com']").last.scroll_into_view_if_needed()
             page.mouse.wheel(0, 900)
@@ -146,7 +163,7 @@ def collect(page, limit: int, selectors: dict, max_rounds: int = 20) -> tuple[li
 
 
 def crawl(identifier: str, limit: int, selectors: dict, *, permission: bool = False,
-          headed: bool = False, search_query: str | None = None,
+          headed: bool = False, ignore_robots: bool = False, delay: float = 1.0, search_query: str | None = None,
           collector=None) -> tuple[list[dict], str]:
     if not permission:
         raise PermissionError(
@@ -165,7 +182,8 @@ def crawl(identifier: str, limit: int, selectors: dict, *, permission: bool = Fa
         request = pw.request.new_context(user_agent=USER_AGENT, timeout=15000)
         policies: dict[str, tuple[int, str]] = {}
         failures: list[str] = []
-        limiter = RateLimiter(delay=1.0, max_requests=120)
+        limiter = RateLimiter(delay=max(1.0, delay), max_requests=120)
+        base_delay = limiter.delay
 
         def guard(route):
             req = route.request
@@ -182,6 +200,9 @@ def crawl(identifier: str, limit: int, selectors: dict, *, permission: bool = Fa
                 ):
                     route.abort()
                     return
+                if (parsed.hostname or "").endswith(AD_HOST_SUFFIXES):
+                    route.abort()  # 리뷰와 무관한 광고 요청은 보내지 않는다
+                    return
                 if parsed.hostname == "nid.naver.com":
                     raise PermissionError("로그인 요청이 감지되었습니다.")
                 origin = f"https://{parsed.netloc}"
@@ -189,13 +210,14 @@ def crawl(identifier: str, limit: int, selectors: dict, *, permission: bool = Fa
                     limiter.wait()
                     response = request.get(origin + "/robots.txt", max_redirects=0)
                     policies[origin] = (response.status, response.text())
-                delay = robots_delay(*policies[origin], req.url)
-                limiter.delay = max(limiter.delay, delay)
+                limiter.delay = max(base_delay, robots_delay(*policies[origin], req.url,
+                                                              ignore_robots=ignore_robots))
                 limiter.wait()
                 # Do not allow automatic redirects to an unchecked path/origin.
                 response = route.fetch(max_redirects=0, max_retries=0, timeout=15000)
                 if response.status >= 300:
-                    raise PermissionError(f"HTTP {response.status}: 리다이렉트 또는 오류에서 중단합니다.")
+                    raise PermissionError(f"HTTP {response.status}: 리다이렉트 또는 오류에서 중단합니다. "
+                                          f"[{req.resource_type}] {req.url[:200]}")
                 route.fulfill(response=response)
             except Exception as exc:
                 failures.append(str(exc))
@@ -203,7 +225,8 @@ def crawl(identifier: str, limit: int, selectors: dict, *, permission: bool = Fa
 
         def response_guard(response):
             if response.request.resource_type in {"document", "xhr", "fetch"} and response.status >= 400:
-                failures.append(f"HTTP {response.status}: 수집을 중단합니다.")
+                failures.append(f"HTTP {response.status}: 수집을 중단합니다. "
+                                f"[{response.request.resource_type}] {response.url[:200]}")
 
         context.route("**/*", guard)
         context.on("response", response_guard)
@@ -256,10 +279,15 @@ def parse_args(argv=None):
     parser.add_argument("--selectors", type=Path, help="DOM 변경 시 카드/필드 선택자 JSON")
     parser.add_argument("--naver-permission", action="store_true", help="네이버의 자동 수집 사전 허락을 받은 경우에만 지정")
     parser.add_argument("--headed", action="store_true")
+    parser.add_argument("--ignore-robots", action="store_true",
+                        help="robots.txt 금지를 통지받고 진행을 고른 경우에만. 속도·차단 감지는 유지")
+    parser.add_argument("--delay", type=float, default=1.0, help="요청 간 최소 간격(초, 1 이상)")
     parser.add_argument("--dry-run", action="store_true", help="합성 HTML로 검증, 외부 네트워크 접근 없음")
     args = parser.parse_args(argv)
     if not 1 <= args.limit <= 50:
         parser.error("--limit은 1~50이어야 합니다.")
+    if args.delay < 1:
+        parser.error("--delay는 1초 이상이어야 합니다.")
     return args
 
 
@@ -287,7 +315,8 @@ def main(argv=None) -> int:
                 browser.close()
         else:
             rows, reason = crawl(args.place, args.limit, selectors,
-                                 permission=args.naver_permission, headed=args.headed)
+                                 permission=args.naver_permission, headed=args.headed,
+                                 ignore_robots=args.ignore_robots, delay=args.delay)
         if not rows:
             print(f"[STOP] 0건: {reason}. 결과를 저장하지 않았습니다.")
             return 4

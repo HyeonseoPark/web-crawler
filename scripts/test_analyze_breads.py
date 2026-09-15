@@ -101,3 +101,10 @@ def test_main_stops_without_overwriting_on_no_match(tmp_path):
 
 def test_main_missing_csv_returns_error(tmp_path):
     assert main([str(tmp_path / "nope.csv")]) == 1
+
+
+def test_store_menu_names_win_over_generic_parts():
+    """메론크림빵은 크림빵이, 메론소금빵은 소금빵이 아니다 (2026-09-15 실데이터 누락)."""
+    from jobs.naver_map.analyze_breads import find_breads
+    got = find_breads("메론크림빵 하나, 메론소금빵 하나, 기본 메론빵, 반숙카레빵, 복숭아산도")
+    assert got == {"메론크림빵": 1, "메론소금빵": 1, "메론빵": 1, "카레빵": 1, "후르츠산도": 1}
