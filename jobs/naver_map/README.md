@@ -66,3 +66,24 @@ PC/모바일/`PostView.naver` URL의 동일 게시물은 하나로 합칩니다.
 
 이 옵션은 필드 위치만 변경합니다. 인증/robots/요청 상한은 변경하지 않습니다.
 드라이런 성공은 실제 네이버 페이지에서의 작동 검증을 대신하지 않습니다.
+
+## 빵 언급 횟수 집계 (`analyze_breads.py`)
+
+수집된 `blog_reviews.csv`를 읽어 **제목+요약**에 등장하는 빵 종류를 세고,
+`bread_mentions.xlsx`(시트 `빵 언급 횟수`)와 콘솔 순위표를 만듭니다. 네트워크 접근은 없습니다.
+
+```bash
+.venv/bin/python jobs/naver_map/analyze_breads.py output/<결과폴더>/blog_reviews.csv
+.venv/bin/python jobs/naver_map/analyze_breads.py --self-test      # 합성 문장으로 로직만 확인
+.venv/bin/python -m pytest scripts/test_analyze_breads.py -q
+```
+
+`언급 글 수`(그 빵을 말한 글의 수)로 정렬하고, 동률이면 `총 등장 횟수`로 가릅니다.
+같은 빵의 표기 변형은 하나로 묶습니다(크로와상→크루아상, 까눌레→카눌레, 피낭시에→휘낭시에 등).
+긴 이름이 짧은 이름을 포함하면 긴 쪽만 셉니다(`에그타르트`를 `타르트`로 중복 계수하지 않음).
+`빵`·`빵집` 같은 일반 명사는 사전에 넣지 않아 오탐이 나지 않습니다.
+
+**해석 시 주의:** crawl_script.py는 게시물 본문을 방문하지 않으므로 집계 대상은 목록에 보이는
+제목과 짧은 요약뿐입니다. 따라서 이 수치는 "본문에서 실제로 칭찬받은 빵"이 아니라
+**"제목·요약에 노출된 빵"**이며, 언급 횟수는 맛 평가가 아니라 노출 빈도입니다.
+사전에 없는 빵은 세지 않으므로, 결과가 빈약하면 `BREAD_LEXICON`에 이름을 추가하세요.
